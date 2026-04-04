@@ -41,7 +41,6 @@ export function Hero() {
     <div ref={heroRef} className="relative min-h-screen w-full bg-background overflow-hidden">
       <Navbar />
 
-      {/* Background Video — DON'T DELETE */}
       <div className="absolute inset-0 z-0">
         <video 
           autoPlay 
@@ -50,7 +49,7 @@ export function Hero() {
           playsInline 
           className="w-full h-full object-cover opacity-30 dark:opacity-20"
         >
-          <source src="/videos/hero.mp4" type="video/mp4" />
+          <source src="https://cdn.coverr.co/videos/coverr-a-beautiful-aerial-view-of-a-library-433/1080p.mp4" type="video/mp4" />
         </video>
         <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-background" />
       </div>
