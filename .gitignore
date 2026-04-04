@@ -26,3 +26,4 @@ dist-ssr
 # Exclude large videos for Github limits
 public/videos/*.mp4
 *.mp4
+.env
