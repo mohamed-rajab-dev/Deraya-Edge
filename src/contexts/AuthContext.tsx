@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import { supabase } from '@/integrations/supabase/client'
+import type { User as SupabaseUser } from '@supabase/supabase-js'
 
 interface User {
   id: string;
@@ -10,14 +12,14 @@ interface User {
 interface AuthContextType {
   user: User | null
   loading: boolean
-  signOut: () => void
+  signOut: () => Promise<void>
   setUser: (user: User | null) => void
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  signOut: () => {},
+  signOut: async () => {},
   setUser: () => {},
 })
 
@@ -26,18 +28,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('deraya_user')
-    const token = localStorage.getItem('deraya_token')
-    
-    if (savedUser && token) {
-      setUser(JSON.parse(savedUser))
-    }
-    setLoading(false)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          display_name: session.user.user_metadata?.display_name || session.user.user_metadata?.full_name,
+          avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
+        })
+      }
+      setLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          display_name: session.user.user_metadata?.display_name || session.user.user_metadata?.full_name,
+          avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
+        })
+      } else {
+        setUser(null)
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
-  const signOut = () => {
-    localStorage.removeItem('deraya_token')
-    localStorage.removeItem('deraya_user')
+  const signOut = async () => {
+    await supabase.auth.signOut()
     setUser(null)
   }
 

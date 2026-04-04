@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { X, Loader2, Mail, Lock, ShieldCheck } from 'lucide-react'
+import { X, Loader as Loader2, Mail, Lock, ShieldCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { apiFetch } from '@/services/api'
+import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
 
 interface AuthModalProps {
@@ -27,19 +27,36 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setMessage('')
     setLoading(true)
     try {
-      const endpoint = isLogin ? '/auth/login' : '/auth/register'
-      const data = await apiFetch(endpoint, {
-        method: 'POST',
-        body: JSON.stringify({ email, password })
-      })
+      if (isLogin) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) throw error
 
-      // Store in localStorage
-      localStorage.setItem('deraya_token', data.token)
-      localStorage.setItem('deraya_user', JSON.stringify(data.user))
-      
-      // Update Context
-      setUser(data.user)
-      
+        setUser({
+          id: data.user.id,
+          email: data.user.email || '',
+          display_name: data.user.user_metadata?.display_name || data.user.user_metadata?.full_name,
+          avatar_url: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
+        })
+      } else {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+        })
+        if (error) throw error
+
+        if (data.user) {
+          setUser({
+            id: data.user.id,
+            email: data.user.email || '',
+            display_name: data.user.user_metadata?.display_name || data.user.user_metadata?.full_name,
+            avatar_url: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
+          })
+        }
+      }
+
       onClose()
     } catch (err: any) {
       setError(err.message)
@@ -48,8 +65,21 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     }
   }
 
-  const handleOAuthLogin = async (p: 'google' | 'microsoft') => {
-    window.location.href = `http://localhost:5000/api/auth/${p}`
+  const handleOAuthLogin = async (provider: 'google' | 'microsoft') => {
+    setLoadingProvider(provider)
+    setError('')
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: provider === 'microsoft' ? 'azure' : 'google',
+        options: {
+          redirectTo: `${window.location.origin}`
+        }
+      })
+      if (error) throw error
+    } catch (err: any) {
+      setError(err.message)
+      setLoadingProvider(null)
+    }
   }
 
   return (
