@@ -97,8 +97,6 @@ CREATE TABLE IF NOT EXISTS public.events (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-);
-
 -- 7. Create Course Enrollments table
 CREATE TABLE IF NOT EXISTS public.course_enrollments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
