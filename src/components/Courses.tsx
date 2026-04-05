@@ -418,16 +418,31 @@ function EnrollModal({ course, onClose }: EnrollModalProps) {
 
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user) { alert('Sign in to enroll'); return }
-    setLoading(true)
     try {
-      const { error } = await supabase.from('course_enrollments').insert({
-        course_id: course.id,
-        user_id: user.id,
-        full_name: name,
-        email: email
-      })
-      if (error) throw error
+      // @ts-ignore
+      const { data: existing, error: checkError } = await (supabase as any)
+        .from('course_enrollments')
+        .select('id')
+        .eq('course_id', course.id)
+        .eq('user_id', user.id)
+        .single()
+
+      if (existing) {
+        alert('You are already enrolled in this course.')
+        setLoading(false)
+        return
+      }
+
+      // @ts-ignore
+      const { error: enrollError } = await (supabase as any)
+        .from('course_enrollments')
+        .insert({
+          course_id: course.id,
+          user_id: user.id,
+          full_name: name,
+          email: email
+        })
+      if (enrollError) throw enrollError
       setDone(true)
     } catch (err: any) {
       alert(err.message || 'Enrollment failed')
@@ -539,9 +554,10 @@ export function Courses() {
   async function fetchCourses() {
     setLoading(true)
     try {
+      // @ts-ignore
       const { data, error } = await supabase
         .from('courses')
-        .select('*')
+        .select(`*, profiles(display_name, avatar_url)`)
         .order('created_at', { ascending: false })
       
       if (error) throw error

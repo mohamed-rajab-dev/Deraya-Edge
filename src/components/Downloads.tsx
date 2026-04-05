@@ -60,7 +60,7 @@ export function Downloads() {
     try {
       const { data, error } = await supabase
         .from('research_papers')
-        .select('*')
+        .select(`*, profiles(display_name, avatar_url)`)
         .order('created_at', { ascending: false })
       if (!error && data) setPublications(data)
     } catch (err) {
@@ -73,19 +73,15 @@ export function Downloads() {
     if (!file || !user) return
     setUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      formData.append('upload_preset', 'beyjg69v')
-
-      // Use 'auto/upload' to handle PDFs, Word docs, etc.
-      const res = await fetch(`https://api.cloudinary.com/v1_1/ds259dm2u/auto/upload`, {
-        method: 'POST',
-        body: formData
-      })
-      const data = await res.json()
-      if (data.secure_url) setFileUrl(data.secure_url)
+      const fileExt = file.name.split('.').pop()
+      const filePath = `${user.id}/${Math.random()}.${fileExt}`
+      const { error } = await supabase.storage.from('research-files').upload(filePath, file)
+      if (error) throw error
+      const { data: urlData } = supabase.storage.from('research-files').getPublicUrl(filePath)
+      setFileUrl(urlData.publicUrl)
+      alert('File uploaded successfully!')
     } catch (err: any) {
-      console.error('Upload Error:', err)
+      alert('Upload failed: ' + err.message)
     } finally {
       setUploading(false)
     }
@@ -93,7 +89,7 @@ export function Downloads() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !fileUrl) return
+    if (!user || !title.trim()) return
     setSubmitting(true)
     try {
       const { error } = await supabase.from('research_papers').insert({
@@ -101,18 +97,18 @@ export function Downloads() {
         title,
         abstract,
         faculty,
-        file_url: fileUrl,
-        pages: Number(pages) || 1,
-        status: 'Ongoing'
+        pages,
+        file_url: fileUrl || null
       })
       if (error) throw error
+      
+      setPublishSuccess(true)
       setShowForm(false)
       setTitle(''); setAbstract(''); setFileUrl(''); setPages(0)
-      setPublishSuccess(true)
       setTimeout(() => setPublishSuccess(false), 3000)
       fetchPapers()
     } catch (err: any) {
-      console.error('Submit Error:', err)
+      alert('Failed to publish: ' + err.message)
     } finally {
       setSubmitting(false)
     }
@@ -124,7 +120,7 @@ export function Downloads() {
     .filter(p => {
       if (!searchQuery.trim()) return true
       const q = searchQuery.toLowerCase()
-      const authorName = p.User?.display_name?.toLowerCase() || ''
+      const authorName = p.profiles?.display_name?.toLowerCase() || ''
       return (
         p.title?.toLowerCase().includes(q) ||
         p.faculty?.toLowerCase().includes(q) ||
@@ -256,11 +252,16 @@ export function Downloads() {
                     <div className="w-14 h-14 bg-accent-blue/10 rounded-2xl flex items-center justify-center text-accent-blue border border-accent-blue/20 group-hover:bg-accent-blue group-hover:text-white transition-all duration-500">
                       <FileText className="w-7 h-7" />
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest bg-accent-blue/10 text-accent-blue border border-accent-blue/20">
-                        {pub.faculty}
-                      </span>
-                    </div>
+                      <div className="flex items-center gap-2">
+                        {pub.profiles?.avatar_url ? (
+                          <img src={pub.profiles.avatar_url} alt="" className="w-4 h-4 rounded-full object-cover" />
+                        ) : (
+                          <User className="w-3.5 h-3.5 text-muted-foreground" />
+                        )}
+                        <span className="text-[11px] font-bold text-foreground">
+                          {pub.profiles?.display_name || 'Researcher'}
+                        </span>
+                      </div>
                   </div>
 
                   <h3 className="text-xl font-black text-foreground leading-tight mb-4 group-hover:text-accent-blue transition-colors">
