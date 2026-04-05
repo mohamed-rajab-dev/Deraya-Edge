@@ -536,7 +536,7 @@ export function Courses() {
   // 🔴 Real-time: new courses appear instantly for all users
   useRealtimeTable('courses', fetchCourses)
 
-  const fetchCourses = async () => {
+  async function fetchCourses() {
     setLoading(true)
     try {
       const { data, error } = await supabase

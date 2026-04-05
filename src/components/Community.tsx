@@ -169,7 +169,7 @@ export function Community() {
   // 🔴 Real-time: re-fetch whenever anyone posts, edits, or deletes a community post
   useRealtimeTable('community_posts', fetchPosts)
 
-  const fetchPosts = async () => {
+  async function fetchPosts() {
     try {
       const { data, error } = await supabase
         .from('community_posts')

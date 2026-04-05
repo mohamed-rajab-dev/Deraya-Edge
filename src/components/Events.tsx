@@ -221,7 +221,7 @@ export function Events() {
   // 🔴 Real-time: re-fetch whenever anyone adds/updates/removes an event
   useRealtimeTable('events', fetchEvents)
 
-  const fetchEvents = async () => {
+  async function fetchEvents() {
     const { data } = await db.from('events').select('*').order('date', { ascending: true })
     if (data) setEvents(data)
   }

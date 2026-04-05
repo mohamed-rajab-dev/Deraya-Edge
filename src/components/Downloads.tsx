@@ -56,7 +56,7 @@ export function Downloads() {
   // 🔴 Real-time: new research papers appear instantly for all users
   useRealtimeTable('research_papers', fetchPapers)
 
-  const fetchPapers = async () => {
+  async function fetchPapers() {
     try {
       const { data, error } = await supabase
         .from('research_papers')

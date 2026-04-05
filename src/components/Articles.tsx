@@ -148,7 +148,7 @@ export function Articles() {
   // 🔴 Real-time: re-fetch whenever anyone inserts/updates/deletes an article
   useRealtimeTable('articles', fetchArticles)
 
-  const fetchArticles = async () => {
+  async function fetchArticles() {
     setLoading(true)
     try {
       const { data, error } = await supabase

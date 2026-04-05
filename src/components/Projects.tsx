@@ -32,7 +32,7 @@ export function Projects() {
   // 🔴 Real-time: re-fetch whenever anyone adds/updates/removes a project
   useRealtimeTable('projects', fetchProjects)
 
-  const fetchProjects = async () => {
+  async function fetchProjects() {
     const { data } = await db.from('projects').select('*').order('created_at', { ascending: false })
     if (data) {
       setProjects(data)
