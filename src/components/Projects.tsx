@@ -72,7 +72,7 @@ export function Projects() {
   const handleSubmit = async () => {
     if (!user || !title.trim()) return
     setSubmitting(true)
-    await db.from('projects').insert({ 
+    const { error } = await db.from('projects').insert({ 
       user_id: user.id, 
       title, 
       description: desc, 
@@ -80,11 +80,18 @@ export function Projects() {
       status,
       image_url: imageUrl || null
     })
+    
+    setSubmitting(false)
+
+    if (error) {
+      alert(`Failed to add project: ${error.message}`)
+      return
+    }
+
     setShowForm(false); setTitle(''); setDesc(''); setImageUrl('')
     setPublishSuccess(true)
     setTimeout(() => setPublishSuccess(false), 3000)
-    fetchProjects()
-    setSubmitting(false)
+    // No need to manually fetchProjects if useRealtimeTable is working
   }
 
   const faculties = ['Business', 'Physical Therapy', 'Dentistry', 'Pharmacy']

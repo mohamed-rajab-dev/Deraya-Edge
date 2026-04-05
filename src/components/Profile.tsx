@@ -15,9 +15,10 @@ interface ProfileData {
 export function Profile() {
   const { user, signOut } = useAuth()
   const [profile, setProfile] = useState<ProfileData | null>(null)
-  const [activeTab, setActiveTab] = useState<'research' | 'posts' | 'projects' | 'courses'>('research')
+  const [activeTab, setActiveTab] = useState<'research' | 'articles' | 'posts' | 'projects' | 'courses'>('research')
   const [showForm, setShowForm] = useState(false)
   const [myResearch, setMyResearch] = useState<any[]>([])
+  const [myArticles, setMyArticles] = useState<any[]>([])
   const [myPosts, setMyPosts] = useState<any[]>([])
   const [myProjects, setMyProjects] = useState<any[]>([])
   const [myCourses, setMyCourses] = useState<any[]>([])
@@ -56,14 +57,16 @@ export function Profile() {
 
   const fetchMyContent = async () => {
     if (!user) return
-    const [r, p, pr, cr] = await Promise.all([
+    const [r, a, p, pr, cr] = await Promise.all([
       db.from('research_papers').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+      db.from('articles').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       db.from('community_posts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       db.from('projects').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       db.from('courses').select('*').eq('instructor_id', user.id).order('created_at', { ascending: false }),
-    ]).catch(() => [{}, {}, {}, {}] as any[])
+    ]).catch(() => [{}, {}, {}, {}, {}] as any[])
     
     setMyResearch(r?.data || [])
+    setMyArticles(a?.data || [])
     setMyPosts(p?.data || [])
     setMyProjects(pr?.data || [])
     setMyCourses(cr?.data || [])
@@ -71,7 +74,7 @@ export function Profile() {
 
   const handleUpdateProfile = async () => {
     if (!user) return
-    await supabase.from('profiles').update({ display_name: editName, bio: editBio, faculty: editFaculty }).eq('user_id', user.id)
+    await supabase.from('profiles').upsert({ user_id: user.id, display_name: editName, bio: editBio, faculty: editFaculty })
     setEditingProfile(false)
     fetchProfile()
   }
@@ -198,6 +201,7 @@ export function Profile() {
         <div className="flex gap-3 mb-6 flex-wrap">
           {[
             { key: 'research' as const, icon: FileText, label: 'Research' },
+            { key: 'articles' as const, icon: FileText, label: 'Articles' },
             { key: 'posts' as const, icon: MessageCircle, label: 'Posts' },
             { key: 'projects' as const, icon: FolderOpen, label: 'Projects' },
             { key: 'courses' as const, icon: FileText, label: 'Courses' },
@@ -287,6 +291,17 @@ export function Profile() {
               <button onClick={() => handleDelete('research_papers', item.id)} className="text-destructive text-sm font-semibold cursor-pointer flex-shrink-0 ml-4">Delete</button>
             </div>
           ))}
+          {activeTab === 'articles' && myArticles.map(item => (
+            <div key={item.id} className="bg-card clean-border rounded-2xl p-6 flex items-start justify-between">
+              <div>
+                <span className="text-xs font-bold text-accent-emerald">{item.faculty}</span>
+                <h4 className="text-lg font-bold text-foreground mt-1">{item.title}</h4>
+                <p className="text-foreground mt-1 text-sm line-clamp-2">{item.content}</p>
+                <span className="text-xs text-muted-foreground mt-2 block">{new Date(item.created_at).toLocaleDateString()}</span>
+              </div>
+              <button onClick={() => handleDelete('articles', item.id)} className="text-destructive text-sm font-semibold cursor-pointer flex-shrink-0 ml-4">Delete</button>
+            </div>
+          ))}
           {activeTab === 'posts' && myPosts.map(item => (
             <div key={item.id} className="bg-card clean-border rounded-2xl p-6 flex items-start justify-between">
               <div>
@@ -325,6 +340,7 @@ export function Profile() {
           ))}
 
           {((activeTab === 'research' && myResearch.length === 0) ||
+            (activeTab === 'articles' && myArticles.length === 0) ||
             (activeTab === 'posts' && myPosts.length === 0) ||
             (activeTab === 'projects' && myProjects.length === 0) ||
             (activeTab === 'courses' && myCourses.length === 0)) && (

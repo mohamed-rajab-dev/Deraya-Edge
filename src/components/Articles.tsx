@@ -153,11 +153,10 @@ export function Articles() {
     try {
       const { data, error } = await supabase
         .from('articles')
-        .select(`*, user_id`)
+        .select(`*, profiles(display_name, avatar_url)`)
         .order('created_at', { ascending: false })
       
       if (error) throw error
-      // Note: In a real app we'd join with users table or profile
       setArticles(data || [])
     } catch (err) {
       console.error(err)
@@ -247,11 +246,10 @@ export function Articles() {
                   </div>
                   <div className="flex items-center justify-between mt-8 pt-6 border-t border-border text-xs text-muted-foreground">
                     <div className="flex items-center gap-4">
-                      <span>{featured.author || featured.User?.display_name || 'Researcher'}</span>
-                      <span>{featured.read_time} min read</span>
+                      <span>{featured.profiles?.display_name || featured.author || featured.User?.display_name || 'Researcher'}</span>
+                      <span className="w-1 h-1 rounded-full bg-border" />
+                      <span>{new Date(featured.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                     </div>
-                    <span>{new Date(featured.date || featured.createdAt || Date.now()).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
-                  </div>
                 </div>
               </motion.article>
             )}

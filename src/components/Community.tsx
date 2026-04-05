@@ -41,12 +41,26 @@ function Avatar({ name, url, size = 10 }: { name: string; url?: string | null; s
   )
 }
 
-/* ─── Post Card ──────────────────────────────────────────────── */
 function PostCard({ post }: { post: any }) {
+  const { user } = useAuth()
   const [liked, setLiked] = useState(false)
   const [likes, setLikes] = useState(post.likes_count || 0)
   const [showComments, setShowComments] = useState(false)
-  const name = post.User?.display_name || 'Researcher'
+  const [isDeleting, setIsDeleting] = useState(false)
+  
+  const name = post.profiles?.display_name || post.User?.display_name || 'Researcher'
+  const avatarUrl = post.profiles?.avatar_url || post.User?.avatar_url
+
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this post?')) return
+    setIsDeleting(true)
+    const { error } = await supabase.from('community_posts').delete().eq('id', post.id)
+    if (error) {
+      alert('Failed to delete: ' + error.message)
+      setIsDeleting(false)
+    }
+    // useRealtimeTable handle removal
+  }
 
   const toggleLike = () => {
     setLiked(l => !l)
@@ -61,7 +75,7 @@ function PostCard({ post }: { post: any }) {
       {/* Header */}
       <div className="flex items-start justify-between p-5 pb-4">
         <div className="flex items-start gap-3">
-          <Avatar name={name} url={post.User?.avatar_url} size={11} />
+          <Avatar name={name} url={avatarUrl} size={11} />
           <div>
             <a href={`/researcher/${post.user_id}`}
               className="font-semibold text-foreground text-[15px] hover:text-accent-red transition-colors leading-tight block">
@@ -74,9 +88,11 @@ function PostCard({ post }: { post: any }) {
             </div>
           </div>
         </div>
-        <button className="p-1.5 rounded-full hover:bg-secondary cursor-pointer text-muted-foreground transition-colors">
-          <MoreHorizontal className="w-4 h-4" />
-        </button>
+        {user?.id === post.user_id && (
+          <button onClick={handleDelete} disabled={isDeleting} className="p-1.5 rounded-full hover:bg-destructive/10 cursor-pointer text-muted-foreground hover:text-destructive transition-colors">
+            {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+          </button>
+        )}
       </div>
 
       {/* Content */}
@@ -173,11 +189,18 @@ export function Community() {
     try {
       const { data, error } = await supabase
         .from('community_posts')
-        .select('*')
+        .select(`*, profiles(display_name, avatar_url)`)
         .order('created_at', { ascending: false })
-      if (!error && data) setPosts(data?.length ? data : STATIC_POSTS)
-      else setPosts(STATIC_POSTS)
-    } catch { setPosts(STATIC_POSTS) }
+      if (error) {
+        console.error('Fetch error:', error)
+        setPosts([])
+      } else {
+        setPosts(data || [])
+      }
+    } catch (e) { 
+      console.error(e)
+      setPosts([]) 
+    }
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,21 +226,23 @@ export function Community() {
     if (!user || !content.trim()) return
     setSubmitting(true)
     try {
-      await supabase.from('community_posts').insert({
+      const { data, error } = await supabase.from('community_posts').insert({
         user_id: user.id,
         content,
         faculty,
         image_url: imageUrl || null
-      })
-      const newPost = {
-        id: `local-${Date.now()}`, content, faculty, image_url: imageUrl || null,
-        likes_count: 0, comments_count: 0, created_at: new Date().toISOString(),
-        profiles: { display_name: user.user_metadata?.full_name || user.email?.split('@')[0], avatar_url: user.user_metadata?.avatar_url },
-        user_id: user.id,
+      }).select().single()
+
+      if (error) {
+        alert(`Failed to publish: ${error.message}`)
+        return
       }
-      setPosts(prev => [newPost, ...prev])
+
+      // No need to manually update state, useRealtimeTable will catch it
       setContent(''); setImageUrl('')
-    } catch { } finally { setSubmitting(false) }
+    } catch (e: any) { 
+        alert(`Error: ${e.message}`)
+    } finally { setSubmitting(false) }
   }
 
   const filtered = posts.filter(p => filter === 'All' || p.faculty === filter)
