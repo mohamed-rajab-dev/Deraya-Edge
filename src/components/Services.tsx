@@ -203,18 +203,14 @@ export function Services() {
                     {activeFaculty.desc}
                   </p>
 
-                  <div className="grid grid-cols-2 lg:grid-cols-3 gap-6" style={{ transform: 'translateZ(20px)' }}>
+                  <div className="grid grid-cols-2 gap-6" style={{ transform: 'translateZ(20px)' }}>
                     <div className={`rounded-3xl p-6 bg-secondary/30 border border-border/20 card-3d`}>
-                      <div className={`text-4xl font-black text-foreground mb-2`}>{activeResearchers.length || '12'}+</div>
+                      <div className={`text-4xl font-black text-foreground mb-2`}>{activeResearchers.length}</div>
                       <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2"><Users className="w-4 h-4" />Researchers</div>
                     </div>
                     <div className={`rounded-3xl p-6 bg-secondary/30 border border-border/20 card-3d`}>
-                      <div className={`text-4xl font-black text-foreground mb-2`}>{activePapers || '45'}+</div>
+                      <div className={`text-4xl font-black text-foreground mb-2`}>{activePapers}</div>
                       <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2"><FileText className="w-4 h-4" />Publications</div>
-                    </div>
-                    <div className={`rounded-3xl p-6 bg-secondary/30 border border-border/20 card-3d hidden lg:block`}>
-                      <div className={`text-4xl font-black text-foreground mb-2`}>4.0</div>
-                      <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-2"><Microscope className="w-4 h-4" />Tier Rating</div>
                     </div>
                   </div>
                 </div>

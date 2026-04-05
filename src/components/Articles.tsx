@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Clock, User, X, Eye, Plus, Loader2, Image, Send, ArrowRight } from 'lucide-react'
-import { apiFetch } from '@/services/api'
+
 import { useAuth } from '@/contexts/AuthContext'
 import { AuthModal } from './AuthModal'
 import { FilterDropdown } from './FilterDropdown'
 import { PremiumReader } from './PremiumReader'
+import { supabase } from '@/integrations/supabase/client'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 
 const STATIC_ARTICLES: any[] = []
 
@@ -17,19 +19,46 @@ function AddArticleModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLoading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'beyjg69v')
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'ds259dm2u'}/image/upload`, {
+        method: 'POST', body: formData
+      })
+      const data = await res.json()
+      setForm(f => ({ ...f, cover_url: data.secure_url }))
+    } catch (err) { alert('Upload failed') }
+    finally { setLoading(false) }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) { alert('Sign in to publish'); return }
     setLoading(true)
-    setTimeout(() => {
-      onAdded({
-        ...form, id: `ua-${Date.now()}`, views: 0, date: new Date().toISOString(),
-        author: user.display_name || user.email?.split('@')[0],
+    try {
+      const { data, error } = await supabase.from('articles').insert({
+        title: form.title,
+        content: form.content,
+        faculty: form.faculty,
+        cover_url: form.cover_url,
         read_time: parseInt(form.read_time) || 5,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
-      })
-      setLoading(false); setDone(true)
-    }, 700)
+        user_id: user.id
+      }).select().single()
+      
+      if (error) throw error
+      onAdded({ ...data, author: user.user_metadata?.full_name || user.email?.split('@')[0] })
+      setDone(true)
+    } catch (err: any) {
+      alert(err.message || 'Failed to publish')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -59,9 +88,16 @@ function AddArticleModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
               <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Article title"
                 className="w-full bg-secondary/40 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/15" />
-              <input value={form.cover_url} onChange={e => setForm(f => ({ ...f, cover_url: e.target.value }))}
-                placeholder="Cover image URL (optional)"
-                className="w-full bg-secondary/40 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none" />
+              
+              <div className="relative group">
+                <input value={form.cover_url} onChange={e => setForm(f => ({ ...f, cover_url: e.target.value }))}
+                  placeholder="Cover image URL or upload below"
+                  className="w-full bg-secondary/40 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none" />
+                <label className="absolute right-3 top-2.5 h-8 bg-foreground text-background px-3 rounded-lg text-[10px] font-bold flex items-center gap-1 cursor-pointer hover:opacity-90 transition shadow-lg shadow-black/10">
+                  <Image className="w-3 h-3" /> Upload Cover
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                </label>
+              </div>
               {form.cover_url && (
                 <div className="rounded-xl overflow-hidden aspect-video bg-secondary">
                   <img src={form.cover_url} alt="Preview" className="w-full h-full object-cover"
@@ -109,13 +145,22 @@ export function Articles() {
 
   useEffect(() => { fetchArticles() }, [])
 
+  // 🔴 Real-time: re-fetch whenever anyone inserts/updates/deletes an article
+  useRealtimeTable('articles', fetchArticles)
+
   const fetchArticles = async () => {
     setLoading(true)
     try {
-      const data = await apiFetch('/articles')
-      setArticles(data?.length ? data : STATIC_ARTICLES)
-    } catch {
-      setArticles(STATIC_ARTICLES)
+      const { data, error } = await supabase
+        .from('articles')
+        .select(`*, user_id`)
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      // Note: In a real app we'd join with users table or profile
+      setArticles(data || [])
+    } catch (err) {
+      console.error(err)
     } finally {
       setLoading(false)
     }

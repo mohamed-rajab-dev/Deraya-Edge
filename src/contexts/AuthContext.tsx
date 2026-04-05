@@ -1,16 +1,10 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { supabase } from '@/integrations/supabase/client'
-import type { User as SupabaseUser } from '@supabase/supabase-js'
-
-interface User {
-  id: string;
-  email: string;
-  display_name?: string;
-  avatar_url?: string;
-}
+import type { User, Session } from '@supabase/supabase-js'
 
 interface AuthContextType {
   user: User | null
+  session: Session | null
   loading: boolean
   signOut: () => Promise<void>
   setUser: (user: User | null) => void
@@ -18,6 +12,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  session: null,
   loading: true,
   signOut: async () => {},
   setUser: () => {},
@@ -25,35 +20,25 @@ const AuthContext = createContext<AuthContextType>({
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
+  const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          display_name: session.user.user_metadata?.display_name || session.user.user_metadata?.full_name,
-          avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
-        })
-      }
+      setSession(session)
+      setUser(session?.user ?? null)
       setLoading(false)
     })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          display_name: session.user.user_metadata?.display_name || session.user.user_metadata?.full_name,
-          avatar_url: session.user.user_metadata?.avatar_url || session.user.user_metadata?.picture,
-        })
-      } else {
-        setUser(null)
+    // Listen for auth changes (login, logout, OAuth callback)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session)
+        setUser(session?.user ?? null)
+        setLoading(false)
       }
-    })
+    )
 
     return () => subscription.unsubscribe()
   }, [])
@@ -61,14 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut()
     setUser(null)
+    setSession(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut, setUser }}>
+    <AuthContext.Provider value={{ user, session, loading, signOut, setUser }}>
       {children}
     </AuthContext.Provider>
   )
 }
 
 export const useAuth = () => useContext(AuthContext)
-

@@ -5,10 +5,11 @@ import {
   Upload, Loader2, ChevronLeft, ChevronRight, Image, Video,
   List, Star, Play, Trash2
 } from 'lucide-react'
-import { apiFetch } from '@/services/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { FilterDropdown } from './FilterDropdown'
 import { Reactions } from './Reactions'
+import { supabase } from '@/integrations/supabase/client'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 
 /* ───────── helpers ─────────────────────────────────────────────── */
 const LEVEL_BADGE: Record<string, string> = {
@@ -92,34 +93,50 @@ function AddCourseModal({ onClose, onAdded }: AddCourseModalProps) {
     else if (step === 'modules') setStep('media')
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setLoading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'beyjg69v')
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'ds259dm2u'}/image/upload`, {
+        method: 'POST', body: formData
+      })
+      const data = await res.json()
+      setCoverUrl(data.secure_url)
+      setPreviewType('image')
+    } catch (err) { alert('Upload failed') }
+    finally { setLoading(false) }
+  }
+
   const handleSubmit = async () => {
     if (!user) { alert('Please sign in to add a course'); return }
     setLoading(true)
     try {
       const payload = {
-        ...form,
+        title: form.title,
+        description: form.description,
+        faculty: form.faculty,
+        level: form.level,
+        duration: form.duration,
+        instructor: form.instructor || user.user_metadata?.full_name || user.email?.split('@')[0],
+        image_url: form.image_url,
         cover_url: coverUrl,
         video_url: videoUrl,
+        featured: form.featured,
         modules: modules.filter(m => m.title),
-        instructor: form.instructor || user.display_name || user.email?.split('@')[0],
         user_id: user.id
       }
-      const created = await apiFetch('/courses', { method: 'POST', body: JSON.stringify(payload) })
-      onAdded(created)
-    } catch {
-      const local = {
-        ...form,
-        id: `local-${Date.now()}`,
-        cover_url: coverUrl,
-        video_url: videoUrl,
-        modules: modules.filter(m => m.title),
-        instructor: form.instructor || user.display_name || user.email?.split('@')[0],
-        user_id: user.id
-      }
-      onAdded(local)
+      const { data, error } = await supabase.from('courses').insert(payload).select().single()
+      if (error) throw error
+      onAdded(data)
+      setDone(true)
+    } catch (err: any) {
+      alert(err.message || 'Failed to publish course')
     } finally {
       setLoading(false)
-      setDone(true)
     }
   }
 
@@ -250,11 +267,17 @@ function AddCourseModal({ onClose, onAdded }: AddCourseModalProps) {
 
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-                      <span className="flex items-center gap-2"><Image className="w-3.5 h-3.5" /> Cover Image URL</span>
+                      <span className="flex items-center gap-2"><Image className="w-3.5 h-3.5" /> Cover Image</span>
                     </label>
-                    <input value={coverUrl} onChange={e => { setCoverUrl(e.target.value); setPreviewType('image') }}
-                      placeholder="https://example.com/course-cover.jpg"
-                      className="w-full bg-secondary/40 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/15 transition" />
+                    <div className="flex gap-2 mb-3">
+                      <input value={coverUrl} onChange={e => { setCoverUrl(e.target.value); setPreviewType('image') }}
+                        placeholder="Image URL or upload"
+                        className="flex-1 bg-secondary/40 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none" />
+                      <label className="bg-foreground text-background px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-2 cursor-pointer hover:opacity-90 transition">
+                        <Upload className="w-3.5 h-3.5" /> Upload
+                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                      </label>
+                    </div>
                     {coverUrl && (
                       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                         className="mt-3 rounded-xl overflow-hidden border border-border aspect-video bg-secondary flex items-center justify-center">
@@ -388,16 +411,29 @@ interface EnrollModalProps { course: any; onClose: () => void }
 
 function EnrollModal({ course, onClose }: EnrollModalProps) {
   const { user } = useAuth()
-  const [name, setName] = useState(user?.display_name || user?.email?.split('@')[0] || '')
+  const [name, setName] = useState(user?.user_metadata?.full_name || user?.email?.split('@')[0] || '')
   const [email, setEmail] = useState(user?.email || '')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
 
   const handleEnroll = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) { alert('Sign in to enroll'); return }
     setLoading(true)
-    try { await apiFetch(`/courses/enroll/${course.id}`, { method: 'POST' }) } catch { /* ok */ }
-    setTimeout(() => { setLoading(false); setDone(true) }, 700)
+    try {
+      const { error } = await supabase.from('course_enrollments').insert({
+        course_id: course.id,
+        user_id: user.id,
+        full_name: name,
+        email: email
+      })
+      if (error) throw error
+      setDone(true)
+    } catch (err: any) {
+      alert(err.message || 'Enrollment failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -497,13 +533,24 @@ export function Courses() {
 
   useEffect(() => { fetchCourses() }, [])
 
+  // 🔴 Real-time: new courses appear instantly for all users
+  useRealtimeTable('courses', fetchCourses)
+
   const fetchCourses = async () => {
+    setLoading(true)
     try {
-      setLoading(true)
-      const data = await apiFetch('/courses')
-      setCourses(data)
-    } catch { setCourses([]) }
-    finally { setLoading(false) }
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .order('created_at', { ascending: false })
+      
+      if (error) throw error
+      setCourses(data || [])
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const filtered = courses.filter((c: any) =>

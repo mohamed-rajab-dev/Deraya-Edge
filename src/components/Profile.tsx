@@ -15,11 +15,12 @@ interface ProfileData {
 export function Profile() {
   const { user, signOut } = useAuth()
   const [profile, setProfile] = useState<ProfileData | null>(null)
-  const [activeTab, setActiveTab] = useState<'research' | 'posts' | 'projects'>('research')
+  const [activeTab, setActiveTab] = useState<'research' | 'posts' | 'projects' | 'courses'>('research')
   const [showForm, setShowForm] = useState(false)
   const [myResearch, setMyResearch] = useState<any[]>([])
   const [myPosts, setMyPosts] = useState<any[]>([])
   const [myProjects, setMyProjects] = useState<any[]>([])
+  const [myCourses, setMyCourses] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -55,14 +56,17 @@ export function Profile() {
 
   const fetchMyContent = async () => {
     if (!user) return
-    const [r, p, pr] = await Promise.all([
+    const [r, p, pr, cr] = await Promise.all([
       db.from('research_papers').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       db.from('community_posts').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
       db.from('projects').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
-    ])
-    setMyResearch(r.data || [])
-    setMyPosts(p.data || [])
-    setMyProjects(pr.data || [])
+      db.from('courses').select('*').eq('instructor_id', user.id).order('created_at', { ascending: false }),
+    ]).catch(() => [{}, {}, {}, {}] as any[])
+    
+    setMyResearch(r?.data || [])
+    setMyPosts(p?.data || [])
+    setMyProjects(pr?.data || [])
+    setMyCourses(cr?.data || [])
   }
 
   const handleUpdateProfile = async () => {
@@ -170,18 +174,22 @@ export function Profile() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-border">
+          <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
             <div className="text-center">
               <div className="text-2xl font-black text-foreground">{myResearch.length}</div>
-              <div className="text-xs text-muted-foreground">Research Papers</div>
+              <div className="text-xs text-muted-foreground">Research</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-black text-foreground">{myPosts.length}</div>
-              <div className="text-xs text-muted-foreground">Community Posts</div>
+              <div className="text-xs text-muted-foreground">Posts</div>
             </div>
             <div className="text-center">
               <div className="text-2xl font-black text-foreground">{myProjects.length}</div>
               <div className="text-xs text-muted-foreground">Projects</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-black text-foreground">{myCourses.length}</div>
+              <div className="text-xs text-muted-foreground">Courses</div>
             </div>
           </div>
         </div>
@@ -192,6 +200,7 @@ export function Profile() {
             { key: 'research' as const, icon: FileText, label: 'Research' },
             { key: 'posts' as const, icon: MessageCircle, label: 'Posts' },
             { key: 'projects' as const, icon: FolderOpen, label: 'Projects' },
+            { key: 'courses' as const, icon: FileText, label: 'Courses' },
           ].map(tab => (
             <button key={tab.key} onClick={() => { setActiveTab(tab.key); setShowForm(false) }}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all cursor-pointer ${
@@ -302,9 +311,23 @@ export function Profile() {
             </div>
           ))}
 
+          {activeTab === 'courses' && myCourses.map(item => (
+            <div key={item.id} className="bg-card clean-border rounded-2xl p-6 flex items-start justify-between">
+              <div>
+                <span className="text-xs font-bold text-destructive">{item.faculty}</span>
+                <span className="ml-2 text-xs text-accent-blue font-bold px-2 py-0.5 rounded-full bg-accent-blue/10">{item.level}</span>
+                <h4 className="text-lg font-bold text-foreground mt-1">{item.title}</h4>
+                {item.description && <p className="text-sm text-muted-foreground mt-2">{item.description}</p>}
+                <span className="text-xs text-muted-foreground mt-2 block">{new Date(item.created_at).toLocaleDateString()}</span>
+              </div>
+              <button onClick={() => handleDelete('courses', item.id)} className="text-destructive text-sm font-semibold cursor-pointer flex-shrink-0 ml-4">Delete</button>
+            </div>
+          ))}
+
           {((activeTab === 'research' && myResearch.length === 0) ||
             (activeTab === 'posts' && myPosts.length === 0) ||
-            (activeTab === 'projects' && myProjects.length === 0)) && (
+            (activeTab === 'projects' && myProjects.length === 0) ||
+            (activeTab === 'courses' && myCourses.length === 0)) && (
             <div className="text-center py-12 text-muted-foreground">
               <p>No {activeTab} yet. Click "Add New" to get started.</p>
             </div>

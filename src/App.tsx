@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { useState } from 'react'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'framer-motion'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
@@ -17,33 +17,6 @@ import AboutPage from './pages/AboutPage'
 import { Profile } from './components/Profile'
 import { ResearcherProfile } from './components/ResearcherProfile'
 import { AuthModal } from './components/AuthModal'
-
-/* ─── OAuth Callback Handler ─────────────────────────────────── */
-function OAuthCallbackHandler() {
-  const { setUser } = useAuth()
-  const navigate = useNavigate()
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const token = params.get('token')
-    const userStr = params.get('user')
-
-    if (token && userStr) {
-      try {
-        const user = JSON.parse(decodeURIComponent(userStr))
-        localStorage.setItem('deraya_token', token)
-        localStorage.setItem('deraya_user', JSON.stringify(user))
-        setUser(user)
-      } catch (e) {
-        console.error('OAuth parse error', e)
-      }
-      // Clean URL
-      window.history.replaceState({}, document.title, '/')
-    }
-  }, [setUser])
-
-  return null
-}
 
 /* ─── Page Transition Wrapper ────────────────────────────────── */
 function PageTransition({ children }: { children: React.ReactNode }) {
@@ -97,7 +70,6 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <OAuthCallbackHandler />
           <PageTransition>
             <Routes>
               <Route path="/"             element={<HomePage />} />

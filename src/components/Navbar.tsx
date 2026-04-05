@@ -150,8 +150,8 @@ export function Navbar({ onSearch }: NavbarProps) {
 
               {user ? (
                 <Link to="/profile" className="flex items-center gap-1.5 bg-accent-blue/10 hover:bg-accent-blue/20 px-4 py-2 rounded-full transition-all border border-accent-blue/20">
-                  {user.avatar_url ? <img src={user.avatar_url} className="w-4 h-4 rounded-full" alt="" /> : <User className="w-4 h-4 text-accent-blue" />}
-                  <span className="text-[11px] font-bold text-foreground truncate max-w-[70px] ml-1">{user.display_name?.split(' ')[0]}</span>
+                  {user.user_metadata?.avatar_url ? <img src={user.user_metadata.avatar_url} className="w-4 h-4 rounded-full" alt="" /> : <User className="w-4 h-4 text-accent-blue" />}
+                  <span className="text-[11px] font-bold text-foreground truncate max-w-[70px] ml-1">{(user.user_metadata?.full_name || user.user_metadata?.name || user.email || '').split(' ')[0]}</span>
                 </Link>
               ) : (
                 <button onClick={() => setShowAuth(true)}

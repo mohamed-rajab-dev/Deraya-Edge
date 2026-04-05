@@ -7,8 +7,9 @@ import { AuthModal } from './AuthModal'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Reactions } from './Reactions'
 import { FilterDropdown } from './FilterDropdown'
-import { apiFetch, apiUpload } from '@/services/api'
+import { supabase } from '@/integrations/supabase/client'
 import { PremiumReader } from './PremiumReader'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 
 const faculties = ['All', 'Business', 'Physical Therapy', 'Dentistry', 'Pharmacy']
 
@@ -52,10 +53,16 @@ export function Downloads() {
 
   useEffect(() => { fetchPapers() }, [])
 
+  // 🔴 Real-time: new research papers appear instantly for all users
+  useRealtimeTable('research_papers', fetchPapers)
+
   const fetchPapers = async () => {
     try {
-      const data = await apiFetch('/papers')
-      setPublications(data)
+      const { data, error } = await supabase
+        .from('research_papers')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!error && data) setPublications(data)
     } catch (err) {
       console.error('Error fetching papers:', err)
     }
@@ -66,8 +73,17 @@ export function Downloads() {
     if (!file || !user) return
     setUploading(true)
     try {
-      const url = await apiUpload(file)
-      setFileUrl(url)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('upload_preset', 'beyjg69v')
+
+      // Use 'auto/upload' to handle PDFs, Word docs, etc.
+      const res = await fetch(`https://api.cloudinary.com/v1_1/ds259dm2u/auto/upload`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await res.json()
+      if (data.secure_url) setFileUrl(data.secure_url)
     } catch (err: any) {
       console.error('Upload Error:', err)
     } finally {
@@ -80,17 +96,16 @@ export function Downloads() {
     if (!user || !fileUrl) return
     setSubmitting(true)
     try {
-      await apiFetch('/papers', {
-        method: 'POST',
-        body: JSON.stringify({
-          title,
-          abstract,
-          faculty,
-          file_url: fileUrl,
-          pages: Number(pages) || 1
-        })
+      const { error } = await supabase.from('research_papers').insert({
+        user_id: user.id,
+        title,
+        abstract,
+        faculty,
+        file_url: fileUrl,
+        pages: Number(pages) || 1,
+        status: 'Ongoing'
       })
-      
+      if (error) throw error
       setShowForm(false)
       setTitle(''); setAbstract(''); setFileUrl(''); setPages(0)
       setPublishSuccess(true)
@@ -258,12 +273,12 @@ export function Downloads() {
                   <div className="flex flex-wrap items-center gap-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground pt-6 border-t border-border/50">
                     <div className="flex items-center gap-2">
                        <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center overflow-hidden">
-                         {pub.User?.avatar_url ? <img src={pub.User.avatar_url} alt="" /> : pub.User?.display_name?.charAt(0)}
+                         {pub.User?.avatar_url ? <img src={pub.User.avatar_url} alt="" /> : <User className="w-3 h-3 text-muted-foreground" />}
                        </div>
                        <span className="text-foreground">{pub.User?.display_name || 'Researcher'}</span>
                     </div>
                     <div className="h-4 w-px bg-border/50" />
-                    <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3 text-accent-blue" /> {new Date(pub.createdAt).getFullYear()}</span>
+                    <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3 text-accent-blue" /> {pub.created_at ? new Date(pub.created_at).getFullYear() : '2026'}</span>
                     {pub.pages > 0 && <span className="flex items-center gap-1.5"><BookOpen className="w-3 h-3 text-accent-blue" /> {pub.pages} P.</span>}
                   </div>
                 </div>
@@ -290,7 +305,7 @@ export function Downloads() {
               abstract: selectedPaper.abstract,
               author: selectedPaper.User?.display_name || 'Researcher',
               faculty: selectedPaper.faculty,
-              date: selectedPaper.createdAt || new Date(),
+              date: selectedPaper.created_at || new Date(),
               fileUrl: selectedPaper.file_url,
               readTime: selectedPaper.pages ? `${selectedPaper.pages} pages document` : 'Open access',
               type: 'research',

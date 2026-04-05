@@ -6,6 +6,9 @@ import { Heart, MessageCircle, Share2, Image as ImageIcon, X, ThumbsUp, Send, Lo
 import { useAuth } from '@/contexts/AuthContext'
 import { AuthModal } from './AuthModal'
 import { apiFetch, apiUpload } from '@/services/api'
+import { supabase } from '@/integrations/supabase/client'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+
 
 const FACULTIES = ['Business', 'Physical Therapy', 'Dentistry', 'Pharmacy']
 const FILTERS = ['All', ...FACULTIES]
@@ -163,10 +166,17 @@ export function Community() {
 
   useEffect(() => { fetchPosts() }, [])
 
+  // 🔴 Real-time: re-fetch whenever anyone posts, edits, or deletes a community post
+  useRealtimeTable('community_posts', fetchPosts)
+
   const fetchPosts = async () => {
     try {
-      const data = await apiFetch('/posts')
-      setPosts(data?.length ? data : STATIC_POSTS)
+      const { data, error } = await supabase
+        .from('community_posts')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!error && data) setPosts(data?.length ? data : STATIC_POSTS)
+      else setPosts(STATIC_POSTS)
     } catch { setPosts(STATIC_POSTS) }
   }
 
@@ -174,19 +184,35 @@ export function Community() {
     const file = e.target.files?.[0]
     if (!file || !user) return
     setUploading(true)
-    try { const url = await apiUpload(file); setImageUrl(url) }
-    catch { } finally { setUploading(false) }
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('upload_preset', 'beyjg69v')
+      
+      const res = await fetch(`https://api.cloudinary.com/v1_1/ds259dm2u/image/upload`, {
+        method: 'POST',
+        body: formData
+      })
+      const data = await res.json()
+      if (data.secure_url) setImageUrl(data.secure_url)
+
+    } catch { } finally { setUploading(false) }
   }
 
   const handlePost = async () => {
     if (!user || !content.trim()) return
     setSubmitting(true)
     try {
-      await apiFetch('/posts', { method: 'POST', body: JSON.stringify({ content, faculty, image_url: imageUrl || null }) })
+      await supabase.from('community_posts').insert({
+        user_id: user.id,
+        content,
+        faculty,
+        image_url: imageUrl || null
+      })
       const newPost = {
         id: `local-${Date.now()}`, content, faculty, image_url: imageUrl || null,
-        likes_count: 0, comments_count: 0, createdAt: new Date().toISOString(),
-        User: { display_name: user.display_name || user.email?.split('@')[0], avatar_url: user.avatar_url },
+        likes_count: 0, comments_count: 0, created_at: new Date().toISOString(),
+        profiles: { display_name: user.user_metadata?.full_name || user.email?.split('@')[0], avatar_url: user.user_metadata?.avatar_url },
         user_id: user.id,
       }
       setPosts(prev => [newPost, ...prev])
@@ -196,7 +222,7 @@ export function Community() {
 
   const filtered = posts.filter(p => filter === 'All' || p.faculty === filter)
 
-  const name = user?.display_name || user?.email?.split('@')[0] || 'You'
+  const name = user?.user_metadata?.full_name || user?.user_metadata?.name || user?.email?.split('@')[0] || 'You'
 
   return (
     <section id="community-section" className="bg-secondary/30 dark:bg-secondary/10 min-h-screen py-10">
@@ -222,7 +248,7 @@ export function Community() {
         {/* Create post — LinkedIn style */}
         <div className="bg-card border border-border rounded-2xl p-5 mb-5 shadow-sm">
           <div className="flex items-start gap-3">
-            {user ? <Avatar name={name} url={user.avatar_url} size={11} /> : (
+            {user ? <Avatar name={name} url={user.user_metadata?.avatar_url} size={11} /> : (
               <div className="w-11 h-11 rounded-full bg-secondary flex-shrink-0" />
             )}
             <button

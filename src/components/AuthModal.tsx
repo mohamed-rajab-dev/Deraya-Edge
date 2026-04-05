@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import { X, Loader as Loader2, Mail, Lock, ShieldCheck } from 'lucide-react'
+import { X, Loader2, Mail, Lock, ShieldCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/integrations/supabase/client'
-import { useAuth } from '@/contexts/AuthContext'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -10,7 +9,6 @@ interface AuthModalProps {
 }
 
 export function AuthModal({ isOpen, onClose }: AuthModalProps) {
-  const { setUser } = useAuth()
   const [isLogin, setIsLogin] = useState(true)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -28,56 +26,41 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     setLoading(true)
     try {
       if (isLogin) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
-
-        setUser({
-          id: data.user.id,
-          email: data.user.email || '',
-          display_name: data.user.user_metadata?.display_name || data.user.user_metadata?.full_name,
-          avatar_url: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
-        })
+        onClose()
       } else {
-        const { data, error } = await supabase.auth.signUp({
-          email,
+        const { error } = await supabase.auth.signUp({ 
+          email, 
           password,
+          options: {
+            emailRedirectTo: window.location.origin
+          }
         })
         if (error) throw error
-
-        if (data.user) {
-          setUser({
-            id: data.user.id,
-            email: data.user.email || '',
-            display_name: data.user.user_metadata?.display_name || data.user.user_metadata?.full_name,
-            avatar_url: data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
-          })
-        }
+        setMessage('Check your email to confirm your account!')
       }
-
-      onClose()
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || 'Something went wrong')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleOAuthLogin = async (provider: 'google' | 'microsoft') => {
-    setLoadingProvider(provider)
+  const handleOAuthLogin = async (provider: 'google' | 'azure') => {
+    setLoadingProvider(provider === 'azure' ? 'microsoft' : provider)
     setError('')
     try {
       const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider === 'microsoft' ? 'azure' : 'google',
+        provider,
         options: {
-          redirectTo: `${window.location.origin}`
+          redirectTo: window.location.origin,
         }
       })
       if (error) throw error
+      // Browser will redirect — modal will close automatically
     } catch (err: any) {
-      setError(err.message)
+      setError(err.message || `Failed to sign in with ${provider}`)
       setLoadingProvider(null)
     }
   }
@@ -141,7 +124,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
             {/* Microsoft */}
             <button 
-              onClick={() => handleOAuthLogin('microsoft')}
+              onClick={() => handleOAuthLogin('azure')}
               disabled={!!loadingProvider}
               className="w-full flex items-center justify-center gap-3 bg-secondary/50 hover:bg-secondary clean-border rounded-2xl px-4 py-3.5 font-bold text-foreground transition-all cursor-pointer disabled:opacity-50"
             >

@@ -19,24 +19,6 @@ const RECOMMENDED_ICONS: Record<string, any> = {
   'Bot': <Bot className="w-5 h-5" />,
 }
 
-const STATIC_RECOMMENDED = {
-  papers: [
-    { id: 'r1', title: 'Antimicrobial Resistance Patterns in Upper Egypt', faculty: 'Pharmacy', reason: 'Trending this week', icon: 'Pharmacy', color: 'accent-red', href: '#downloads-section' },
-    { id: 'r2', title: 'Optimizing Supply Chain in Healthcare SMEs', faculty: 'Business', reason: 'Highly rated', icon: 'Business', color: 'accent-blue', href: '#downloads-section' },
-    { id: 'r3', title: 'Evidence-Based PT for Rotator Cuff Injuries', faculty: 'Physical Therapy', reason: 'Just published', icon: 'Physical Therapy', color: 'accent-emerald', href: '#downloads-section' },
-  ],
-  projects: [
-    { id: 'rp1', title: 'AI-Assisted Caries Detection System', faculty: 'Dentistry', reason: 'Innovative research', icon: 'Dentistry', color: 'accent-purple', href: '#projects-section' },
-    { id: 'rp2', title: 'Community Pharmacy Intervention Study', faculty: 'Pharmacy', reason: 'Popular in Pharmacy', icon: 'Microscope', color: 'accent-red', href: '#projects-section' },
-    { id: 'rp3', title: 'Startup Ecosystem Analysis — Minia', faculty: 'Business', reason: 'Editor\'s Pick', icon: 'Rocket', color: 'accent-blue', href: '#projects-section' },
-  ],
-  posts: [
-    { id: 'rc1', title: '"The Hidden Epidemic: MSK Pain in Students"', faculty: 'Physical Therapy', reason: 'Most loved', icon: 'Message', color: 'accent-emerald', href: '#articles-section' },
-    { id: 'rc2', title: '"Why Pharmacy Grads Are Building Startups"', faculty: 'Pharmacy', reason: 'Going viral', icon: 'Pen', color: 'accent-red', href: '#articles-section' },
-    { id: 'rc3', title: '"Smile Design in the Age of AI"', faculty: 'Dentistry', reason: 'Most discussed', icon: 'Bot', color: 'accent-purple', href: '#articles-section' },
-  ],
-}
-
 const COLOR_TEXT: Record<string, string> = {
   'accent-red': 'text-accent-red',
   'accent-blue': 'text-accent-blue',
@@ -94,11 +76,13 @@ function RecommendedCard({ item, delay }: RecommendedCardProps) {
 interface RowProps {
   title: string
   icon: React.ReactNode
-  items: typeof STATIC_RECOMMENDED.papers
+  items: any[]
   seeAllHref: string
 }
 
 function RecommendedRow({ title, icon, items, seeAllHref }: RowProps) {
+  if (!items || items.length === 0) return null;
+
   return (
     <div className="mb-20 last:mb-0">
       <div className="flex items-center justify-between mb-8 px-2">
@@ -120,29 +104,56 @@ function RecommendedRow({ title, icon, items, seeAllHref }: RowProps) {
 }
 
 export function Recommended() {
-  const [realPapers, setRealPapers] = useState<any[]>([])
+  const [papers, setPapers] = useState<any[]>([])
+  const [projects, setProjects] = useState<any[]>([])
+  const [articles, setArticles] = useState<any[]>([])
 
   useEffect(() => {
-    db.from('research_papers')
-      .select('id, title, faculty, created_at')
-      .order('created_at', { ascending: false })
-      .limit(3)
+    // Fetch top 3 research papers
+    db.from('research_papers').select('id, title, faculty, created_at').order('created_at', { ascending: false }).limit(3)
       .then(({ data }: any) => {
-        if (data && data.length > 0) {
-          setRealPapers(data.map((p: any, i: number) => ({
-            id: p.id,
-            title: p.title,
-            faculty: p.faculty,
-            reason: i === 0 ? 'Just published' : i === 1 ? 'Trending' : 'Popular',
+        if (data) {
+          setPapers(data.map((p: any, i: number) => ({
+            id: p.id, title: p.title, faculty: p.faculty, 
+            reason: i === 0 ? 'Just published' : 'Trending', 
             icon: p.faculty || 'Pharmacy',
-            color: p.faculty === 'Pharmacy' ? 'accent-red' : p.faculty === 'Business' ? 'accent-blue' : p.faculty === 'Physical Therapy' ? 'accent-emerald' : 'accent-purple',
+            color: p.faculty === 'Pharmacy' ? 'accent-red' : p.faculty === 'Business' ? 'accent-blue' : 'accent-purple',
             href: '#downloads-section',
+          })))
+        }
+      })
+
+    // Fetch top 3 projects
+    db.from('projects').select('id, title, faculty, created_at').order('created_at', { ascending: false }).limit(3)
+      .then(({ data }: any) => {
+        if (data) {
+          setProjects(data.map((p: any, i: number) => ({
+            id: p.id, title: p.title, faculty: p.faculty, 
+            reason: i === 0 ? 'Innovative' : 'Trending Project', 
+            icon: 'Rocket',
+            color: p.faculty === 'Dentistry' ? 'accent-emerald' : 'accent-blue',
+            href: '#projects-section',
+          })))
+        }
+      })
+
+    // Fetch top 3 articles
+    db.from('articles').select('id, title, created_at').order('created_at', { ascending: false }).limit(3)
+      .then(({ data }: any) => {
+        if (data) {
+          setArticles(data.map((p: any, i: number) => ({
+            id: p.id, title: p.title, faculty: 'General', 
+            reason: i === 0 ? 'Most loved' : 'Editor Pick', 
+            icon: 'Pen', color: 'accent-red',
+            href: '#articles-section',
           })))
         }
       })
   }, [])
 
-  const papers = realPapers.length >= 3 ? realPapers : STATIC_RECOMMENDED.papers
+  if (papers.length === 0 && projects.length === 0 && articles.length === 0) {
+    return null; // hide section if totally empty
+  }
 
   return (
     <section id="recommended-section" className="relative py-24 bg-card/30">
@@ -171,13 +182,13 @@ export function Recommended() {
         <RecommendedRow
           title="Top Projects"
           icon={<Star className="w-5 h-5 text-accent-emerald" />}
-          items={STATIC_RECOMMENDED.projects}
+          items={projects}
           seeAllHref="#projects-section"
         />
         <RecommendedRow
           title="Articles & Takeaways"
           icon={<Sparkles className="w-5 h-5 text-accent-purple" />}
-          items={STATIC_RECOMMENDED.posts}
+          items={articles}
           seeAllHref="#articles-section"
         />
       </div>

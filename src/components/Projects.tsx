@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Sparkles } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Sparkles, Image as ImageIcon, Upload, X } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client'
 import { useAuth } from '@/contexts/AuthContext'
 import { AuthModal } from './AuthModal'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Reactions } from './Reactions'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 
 const db = supabase as any
 
@@ -22,8 +23,14 @@ export function Projects() {
   const [status, setStatus] = useState('Ongoing')
   const [submitting, setSubmitting] = useState(false)
   const [publishSuccess, setPublishSuccess] = useState(false)
+  const [imageUrl, setImageUrl] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const imgRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { fetchProjects() }, [])
+
+  // 🔴 Real-time: re-fetch whenever anyone adds/updates/removes a project
+  useRealtimeTable('projects', fetchProjects)
 
   const fetchProjects = async () => {
     const { data } = await db.from('projects').select('*').order('created_at', { ascending: false })
@@ -41,11 +48,39 @@ export function Projects() {
     }
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'beyjg69v')
+    
+    try {
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'ds259dm2u'}/image/upload`, {
+        method: 'POST', body: formData
+      })
+      const data = await res.json()
+      if (data.secure_url) setImageUrl(data.secure_url)
+    } catch {
+      alert('Failed to upload image')
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!user || !title.trim()) return
     setSubmitting(true)
-    await db.from('projects').insert({ user_id: user.id, title, description: desc, faculty, status })
-    setShowForm(false); setTitle(''); setDesc('')
+    await db.from('projects').insert({ 
+      user_id: user.id, 
+      title, 
+      description: desc, 
+      faculty, 
+      status,
+      image_url: imageUrl || null
+    })
+    setShowForm(false); setTitle(''); setDesc(''); setImageUrl('')
     setPublishSuccess(true)
     setTimeout(() => setPublishSuccess(false), 3000)
     fetchProjects()
@@ -103,7 +138,25 @@ export function Projects() {
                 </select>
               </div>
               <textarea value={desc} onChange={e => setDesc(e.target.value)} placeholder="Description" className="bg-input clean-border rounded-xl px-4 py-3 text-foreground text-sm md:col-span-2 resize-none focus:outline-none" rows={3} />
-              <div className="flex gap-2 md:col-span-2">
+              
+              <div className="md:col-span-2 flex items-center gap-3">
+                <input type="file" ref={imgRef} accept="image/*" onChange={handleImageUpload} className="hidden" />
+                <button onClick={() => imgRef.current?.click()} disabled={uploading}
+                  className="flex items-center gap-2 bg-secondary clean-border rounded-xl px-4 py-3 text-muted-foreground hover:text-foreground cursor-pointer text-sm flex-1 max-w-[200px]">
+                  <Upload className="w-4 h-4" />
+                  {uploading ? 'Uploading…' : imageUrl ? '✓ Cover Set' : 'Upload Cover'}
+                </button>
+                {imageUrl && (
+                  <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-border">
+                    <img src={imageUrl} alt="" className="w-full h-full object-cover" />
+                    <button onClick={() => setImageUrl('')} className="absolute top-0 right-0 bg-black/50 text-white rounded-bl-lg p-0.5 cursor-pointer hover:bg-red-500">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 md:col-span-2 mt-2">
                 <button onClick={handleSubmit} disabled={submitting} className="bg-accent-emerald text-white px-6 py-2.5 rounded-xl font-semibold cursor-pointer text-sm disabled:opacity-50">
                   {submitting ? 'Adding…' : 'Add Project'}
                 </button>
@@ -134,6 +187,11 @@ export function Projects() {
                       {project.status}
                     </span>
                   </div>
+                  {project.image_url && (
+                    <div className="rounded-xl overflow-hidden aspect-video mb-3 border border-border">
+                      <img src={project.image_url} alt={project.title} className="w-full h-full object-cover" />
+                    </div>
+                  )}
                   <h3 className="text-lg font-bold text-foreground mb-2">{project.title}</h3>
                   {project.description && <p className="text-muted-foreground text-sm leading-relaxed mb-4 line-clamp-2 flex-1">{project.description}</p>}
                   <a href={`/researcher/${project.user_id}`} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mt-auto">

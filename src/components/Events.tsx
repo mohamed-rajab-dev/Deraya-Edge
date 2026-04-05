@@ -4,9 +4,10 @@ import { Calendar, MapPin, Users, X, CheckCircle, Clock, ArrowRight, Plus, Loade
 import { useAuth } from '@/contexts/AuthContext'
 import { FilterDropdown } from './FilterDropdown'
 import { Reactions } from './Reactions'
+import { supabase } from '@/integrations/supabase/client'
+import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 
-/* ─── Static Events Data ─────────────────────────────────────────── */
-const STATIC_EVENTS: any[] = []
+const db = supabase as any
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
@@ -31,25 +32,32 @@ function AddEventModal({ onClose, onAdded }: AddEventModalProps) {
   const faculties = ['All Faculties', 'Pharmacy', 'Business', 'Physical Therapy', 'Dentistry']
   const types = ['On-Campus', 'Online', 'Hybrid']
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!user) { alert('Please sign in to add an event'); return }
     setLoading(true)
-    setTimeout(() => {
+    try {
       const newEvent = {
-        ...form,
-        id: `user-${Date.now()}`,
+        title: form.title, description: form.description, date: form.date, time: form.time,
+        location: form.location, type: form.type, faculty: form.faculty,
         capacity: parseInt(form.capacity) || 100,
         registered: 0,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         featured: false,
-        host: user.display_name || user.email?.split('@')[0],
+        host: user.user_metadata?.full_name || user.email?.split('@')[0],
         user_id: user.id,
       }
-      onAdded(newEvent)
-      setLoading(false)
+      
+      const { data, error } = await db.from('events').insert(newEvent).select().single()
+      if (error) throw error
+      
+      onAdded(data)
       setDone(true)
-    }, 800)
+    } catch (err: any) {
+      alert(err.message || 'Failed to create event')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -177,7 +185,7 @@ function RegisterModal({ event, onClose }: RegisterModalProps) {
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input required defaultValue={user?.display_name || ''} placeholder="Full Name" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
+              <input required defaultValue={user?.user_metadata?.full_name || (user as any)?.display_name || ''} placeholder="Full Name" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
               <input required type="email" defaultValue={user?.email || ''} placeholder="University Email" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
               <button type="submit" disabled={loading} className="w-full bg-foreground text-background font-bold py-3.5 rounded-xl text-sm cursor-pointer hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Registering...</> : 'Confirm Registration →'}
@@ -201,15 +209,27 @@ function RegisterModal({ event, onClose }: RegisterModalProps) {
 
 /* ─── Main Events Component ─────────────────────────────────────── */
 export function Events() {
-  const [events, setEvents] = useState<any[]>(STATIC_EVENTS)
+  const [events, setEvents] = useState<any[]>([])
   const [registerEvent, setRegisterEvent] = useState<any | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [filter, setFilter] = useState('All')
 
+  useEffect(() => {
+    fetchEvents()
+  }, [])
+
+  // 🔴 Real-time: re-fetch whenever anyone adds/updates/removes an event
+  useRealtimeTable('events', fetchEvents)
+
+  const fetchEvents = async () => {
+    const { data } = await db.from('events').select('*').order('date', { ascending: true })
+    if (data) setEvents(data)
+  }
+
   const filters = ['All', 'Online', 'On-Campus', 'Hybrid', 'Business', 'Physical Therapy', 'Dentistry', 'Pharmacy']
   const filtered = events.filter(e => filter === 'All' ? true : ['Online', 'On-Campus', 'Hybrid'].includes(filter) ? e.type === filter : e.faculty === filter || e.faculty === 'All Faculties')
-  const featured = events.find(e => e.featured)
-  const rest = filtered.filter(e => !e.featured)
+  const featured = events.find(e => e.featured) || (filtered.length > 0 ? filtered[0] : null)
+  const rest = filtered.filter(e => e.id !== featured?.id)
 
   return (
     <section id="events-section" className="harvard-section bg-secondary/20 dark:bg-secondary/5">
