@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local report folders
+/draft/
+/refactor-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

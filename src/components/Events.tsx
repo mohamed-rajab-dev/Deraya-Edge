@@ -6,8 +6,9 @@ import { FilterDropdown } from './FilterDropdown'
 import { Reactions } from './Reactions'
 import { supabase } from '@/integrations/supabase/client'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
+import { AuthModal } from './AuthModal'
 
-const db = supabase as any
+const db = supabase
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'long', day: 'numeric', year: 'numeric' })
@@ -154,7 +155,55 @@ function RegisterModal({ event, onClose }: RegisterModalProps) {
   const { user } = useAuth()
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(false)
-  const handleSubmit = (e: React.FormEvent) => { e.preventDefault(); setLoading(true); setTimeout(() => { setLoading(false); setDone(true) }, 900) }
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+
+    if (!user) {
+      alert('Please sign in to register for this event')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const formData = new FormData(e.currentTarget)
+      const fullName = String(formData.get('full_name') || '').trim()
+      const email = String(formData.get('email') || '').trim()
+
+      const { data: existing, error: existingError } = await db
+        .from('event_registrations')
+        .select('id')
+        .eq('event_id', event.id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (existingError) throw existingError
+
+      if (existing) {
+        alert('You are already registered for this event.')
+        return
+      }
+
+      const { error } = await db.from('event_registrations').insert({
+        event_id: event.id,
+        user_id: user.id,
+        full_name:
+          fullName ||
+          user.user_metadata?.full_name ||
+          user.user_metadata?.name ||
+          user.email?.split('@')[0] ||
+          null,
+        email: email || user.email || null,
+      })
+
+      if (error) throw error
+      setDone(true)
+    } catch (err: any) {
+      alert(err.message || 'Registration failed')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -185,8 +234,8 @@ function RegisterModal({ event, onClose }: RegisterModalProps) {
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-4">
-              <input required defaultValue={user?.user_metadata?.full_name || (user as any)?.display_name || ''} placeholder="Full Name" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
-              <input required type="email" defaultValue={user?.email || ''} placeholder="University Email" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
+              <input required name="full_name" defaultValue={user?.user_metadata?.full_name || (user as any)?.display_name || ''} placeholder="Full Name" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
+              <input required type="email" name="email" defaultValue={user?.email || ''} placeholder="University Email" className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-foreground/20 transition" />
               <button type="submit" disabled={loading} className="w-full bg-foreground text-background font-bold py-3.5 rounded-xl text-sm cursor-pointer hover:opacity-90 disabled:opacity-50 transition flex items-center justify-center gap-2">
                 {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Registering...</> : 'Confirm Registration →'}
               </button>
@@ -209,9 +258,11 @@ function RegisterModal({ event, onClose }: RegisterModalProps) {
 
 /* ─── Main Events Component ─────────────────────────────────────── */
 export function Events() {
+  const { user } = useAuth()
   const [events, setEvents] = useState<any[]>([])
   const [registerEvent, setRegisterEvent] = useState<any | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showAuth, setShowAuth] = useState(false)
   const [filter, setFilter] = useState('All')
 
   useEffect(() => {
@@ -230,6 +281,9 @@ export function Events() {
   const filtered = events.filter(e => filter === 'All' ? true : ['Online', 'On-Campus', 'Hybrid'].includes(filter) ? e.type === filter : e.faculty === filter || e.faculty === 'All Faculties')
   const featured = events.find(e => e.featured) || (filtered.length > 0 ? filtered[0] : null)
   const rest = filtered.filter(e => e.id !== featured?.id)
+  const featuredRegistered = featured?.registered ?? 0
+  const featuredCapacity = featured?.capacity ?? 0
+  const featuredProgress = featuredCapacity > 0 ? Math.min((featuredRegistered / featuredCapacity) * 100, 100) : 0
 
   return (
     <section id="events-section" className="harvard-section bg-secondary/20 dark:bg-secondary/5">
@@ -239,7 +293,7 @@ export function Events() {
             <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.3em] mb-4">Academic Synergy</p>
             <h2 className="harvard-heading">Events & Sessions</h2>
             <div className="flex items-center gap-4 mt-10">
-              <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-2 bg-foreground text-background px-7 py-3.5 rounded-full text-[11px] font-black tracking-widest uppercase cursor-pointer hover:opacity-90 transition-all shadow-2xl">
+              <button onClick={() => (user ? setShowAdd(true) : setShowAuth(true))} className="inline-flex items-center gap-2 bg-foreground text-background px-7 py-3.5 rounded-full text-[11px] font-black tracking-widest uppercase cursor-pointer hover:opacity-90 transition-all shadow-2xl">
                 <Plus className="w-4 h-4" /> Add Event
               </button>
               <span className="harvard-arrow-btn">
@@ -265,7 +319,7 @@ export function Events() {
                 initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
                 whileHover={{ rotateX: 2, rotateY: -1, y: -4 }}
                 className="group relative h-full min-h-[250px] rounded-[32px] overflow-hidden glass-card shadow-[0_20px_40px_-10px_rgba(0,0,0,0.1)] border border-border shimmer-sweep cursor-pointer p-1"
-                onClick={() => setRegisterEvent(featured)}
+                onClick={() => (user ? setRegisterEvent(featured) : setShowAuth(true))}
                 style={{ perspective: '2000px', transformStyle: 'preserve-3d' }}
               >
                 <div className="relative z-10 grid grid-cols-1 md:grid-cols-12 h-full">
@@ -299,16 +353,16 @@ export function Events() {
                         <div>
                           <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest mb-1 opacity-60">Registered Participants</p>
                           <h4 className="text-3xl font-black text-foreground tabular-nums tracking-tighter">
-                            {featured.registered} <span className="text-muted-foreground text-sm font-light">/ {featured.capacity}</span>
+                            {featuredRegistered} <span className="text-muted-foreground text-sm font-light">/ {featuredCapacity}</span>
                           </h4>
                         </div>
                         <div className="space-y-2">
                            <div className="h-1.5 w-full bg-secondary rounded-full overflow-hidden">
-                             <motion.div initial={{ width: 0 }} whileInView={{ width: `${(featured.registered/featured.capacity)*100}%` }} viewport={{ once: true }} transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
+                             <motion.div initial={{ width: 0 }} whileInView={{ width: `${featuredProgress}%` }} viewport={{ once: true }} transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
                                className="h-full bg-accent-blue" />
                            </div>
                            <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest text-right">
-                             {Math.round((featured.registered/featured.capacity)*100)}% Momentum
+                             {Math.round(featuredProgress)}% Momentum
                            </p>
                         </div>
                       </div>
@@ -328,7 +382,7 @@ export function Events() {
               </div>
               <div className="space-y-4 flex-1 overflow-y-auto pr-2 custom-scrollbar">
                 {rest.slice(0, 4).map(event => (
-                  <div key={event.id} className="group flex items-center gap-5 p-5 rounded-[32px] bg-secondary/30 border border-transparent hover:border-border hover:bg-card transition-all cursor-pointer card-3d" onClick={() => setRegisterEvent(event)}>
+                  <div key={event.id} className="group flex items-center gap-5 p-5 rounded-[32px] bg-secondary/30 border border-transparent hover:border-border hover:bg-card transition-all cursor-pointer card-3d" onClick={() => (user ? setRegisterEvent(event) : setShowAuth(true))}>
                     <div className="w-14 h-14 rounded-[20px] bg-white dark:bg-white/5 shadow-sm flex flex-col items-center justify-center group-hover:bg-accent-blue group-hover:text-white transition-all transform group-hover:scale-105">
                       <span className="text-[10px] font-black uppercase tracking-tighter">{new Date(event.date).toLocaleString('en-US', { month: 'short' })}</span>
                       <span className="text-2xl font-black leading-none">{new Date(event.date).getDate()}</span>
@@ -351,7 +405,7 @@ export function Events() {
           {rest.slice(4).map((event, i) => (
             <motion.div key={event.id} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}
               whileHover={{ y: -10 }}
-              className="p-8 rounded-[40px] bg-card border border-border/50 hover:border-accent-blue/30 transition-all cursor-pointer card-3d shadow-sm hover:shadow-xl group" onClick={() => setRegisterEvent(event)}>
+              className="p-8 rounded-[40px] bg-card border border-border/50 hover:border-accent-blue/30 transition-all cursor-pointer card-3d shadow-sm hover:shadow-xl group" onClick={() => (user ? setRegisterEvent(event) : setShowAuth(true))}>
               <div className="flex justify-between items-start mb-6">
                 <div className="w-12 h-12 bg-accent-blue/5 rounded-2xl flex items-center justify-center group-hover:bg-accent-blue/10 transition-colors">
                    <Calendar className="w-6 h-6 text-accent-blue" />
@@ -376,7 +430,7 @@ export function Events() {
             <Calendar className="w-16 h-16 text-muted-foreground/30 mx-auto mb-6" />
             <h3 className="font-playfair text-3xl text-foreground mb-3 font-black">No Synergy Found</h3>
             <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-8 font-light italic opacity-80">"Adjust your filters or be the visionary to initiate a new academic event."</p>
-            <button onClick={() => { setFilter('All'); setShowAdd(true) }} className="bg-foreground text-background px-10 py-4 rounded-full text-[11px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">
+            <button onClick={() => { setFilter('All'); user ? setShowAdd(true) : setShowAuth(true) }} className="bg-foreground text-background px-10 py-4 rounded-full text-[11px] font-black uppercase tracking-widest hover:scale-105 transition-all shadow-2xl">
               Initiate Event
             </button>
           </div>
@@ -386,6 +440,7 @@ export function Events() {
         {showAdd && <AddEventModal onClose={() => setShowAdd(false)} onAdded={e => setEvents(prev => [e, ...prev])} />}
         {registerEvent && <RegisterModal event={registerEvent} onClose={() => setRegisterEvent(null)} />}
       </AnimatePresence>
+      <AuthModal isOpen={showAuth} onClose={() => setShowAuth(false)} />
     </section>
   )
 }

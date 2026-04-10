@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { AuthModal } from './AuthModal'
 import { FilterDropdown } from './FilterDropdown'
 import { PremiumReader } from './PremiumReader'
+import { apiUpload } from '@/services/api'
 import { supabase } from '@/integrations/supabase/client'
 import { useRealtimeTable } from '@/hooks/useRealtimeTable'
 
@@ -23,15 +24,9 @@ function AddArticleModal({ onClose, onAdded }: { onClose: () => void; onAdded: (
     const file = e.target.files?.[0]
     if (!file) return
     setLoading(true)
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('upload_preset', import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'beyjg69v')
     try {
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || 'ds259dm2u'}/image/upload`, {
-        method: 'POST', body: formData
-      })
-      const data = await res.json()
-      setForm(f => ({ ...f, cover_url: data.secure_url }))
+      const url = await apiUpload(file)
+      setForm(f => ({ ...f, cover_url: url }))
     } catch (err) { alert('Upload failed') }
     finally { setLoading(false) }
   }

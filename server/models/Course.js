@@ -3,42 +3,62 @@ const sequelize = require('./index');
 const User = require('./User');
 
 const Course = sequelize.define('Course', {
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: false
-  },
-  faculty: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  instructor: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-  duration: {
-    type: DataTypes.STRING,
-    defaultValue: '4 weeks'
-  },
-  level: {
-    type: DataTypes.STRING,
-    defaultValue: 'Beginner'
-  },
-  enrolled_count: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0
-  },
-  featured: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  },
-  image_url: {
-    type: DataTypes.STRING,
-    allowNull: true
-  }
+	user_id: {
+		type: DataTypes.UUID,
+		allowNull: true,
+	},
+	title: {
+		type: DataTypes.STRING,
+		allowNull: false,
+	},
+	description: {
+		type: DataTypes.TEXT,
+		allowNull: false,
+	},
+	faculty: {
+		type: DataTypes.STRING,
+		allowNull: false,
+	},
+	instructor: {
+		type: DataTypes.STRING,
+		allowNull: true,
+	},
+	duration: {
+		type: DataTypes.STRING,
+		defaultValue: '4 weeks',
+	},
+	level: {
+		type: DataTypes.STRING,
+		defaultValue: 'Beginner',
+	},
+	enrolled_count: {
+		type: DataTypes.INTEGER,
+		defaultValue: 0,
+	},
+	featured: {
+		type: DataTypes.BOOLEAN,
+		defaultValue: false,
+	},
+	cover_url: {
+		type: DataTypes.STRING,
+		allowNull: true,
+	},
+	video_url: {
+		type: DataTypes.STRING,
+		allowNull: true,
+	},
+	modules: {
+		type: DataTypes.JSON,
+		defaultValue: [],
+	},
+	is_published: {
+		type: DataTypes.BOOLEAN,
+		defaultValue: true,
+	},
+	image_url: {
+		type: DataTypes.STRING,
+		allowNull: true,
+	},
 });
 
 User.hasMany(Course, { foreignKey: 'user_id' });
