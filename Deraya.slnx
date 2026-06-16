@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Deraya.Api/Deraya.Api.csproj" />
+  <Project Path="Deraya.Application/Deraya.Application.csproj" />
+  <Project Path="Deraya.Domain/Deraya.Domain.csproj" />
+  <Project Path="Deraya.Infrastructure/Deraya.Infrastructure.csproj" />
+</Solution>
